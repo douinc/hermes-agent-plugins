@@ -6,10 +6,10 @@ plugins. Each top-level directory is one installable plugin.
 > _Community plugins for hermes-agent — not officially affiliated with or
 > endorsed by Nous Research._
 
-> Install target the hermes plugin system directly — drop into
-> `~/.hermes/plugins/<name>/` and enable. The `hermes plugins install` command
-> does this for you straight from GitHub, including from a subdirectory of a
-> monorepo like this one.
+> These plugins install into the hermes plugin system directly — each lands in
+> `~/.hermes/plugins/<name>/` and is gated by `plugins.enabled`. The
+> `hermes plugins install` command does this for you straight from GitHub,
+> including from a subdirectory of a monorepo like this one.
 
 ## Plugins
 

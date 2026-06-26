@@ -12,6 +12,13 @@ metadata:
 
 # Google Meet Assistant
 
+> **Example skill — adapt before use.** This reflects one real deployment
+> (Discord delivery, Korean captions, a team calendar). Swap the platform,
+> language, and `<YOUR_TEAM_CALENDAR_ID>` for your own. The `google_meet`
+> plugin works without this skill; this just encodes the
+> create → join → transcript → summary conventions for the agent. See the
+> README beside this file.
+
 ## Overview
 This skill governs the full Google Meet flow with the organization's authenticated Google account: creating meeting links to share, joining calls (no lobby wait), scraping the live captions into a transcript, and posting readable Discord-markdown summaries — live or after the meeting.
 
