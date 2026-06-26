@@ -74,6 +74,15 @@ cp -r examples/google-meet-assistant-skill ~/.hermes/skills/google-meet-assistan
 
 The plugin's tools work fully without any skill.
 
+## Security
+
+Runtime artifacts — signed-in browser sessions (`auth.json`), meeting
+transcripts, and tokens — are sensitive and live outside this repo under your
+hermes home; never commit them. The optional remote-node server binds to
+localhost and uses a bearer token but has **no TLS**, so don't expose it beyond
+a trusted network. See [SECURITY.md](SECURITY.md) for the full notes (and how to
+report a vulnerability).
+
 ## Contributing
 
 Contributions are welcome — this repo is actively developed. Open an issue or PR
