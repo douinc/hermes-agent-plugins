@@ -71,9 +71,37 @@ Without v2: the "realtime" path is skipped; transcribe runs alone.
 hermes plugins enable google_meet
 hermes meet install                                      # pip + Chromium
 hermes meet setup                                        # preflight
-hermes meet auth                                         # optional
+hermes meet auth                                         # sign in (see Setup below)
 hermes meet join https://meet.google.com/abc-defg-hij    # transcribe
 ```
+
+## Setup (one-time): authentication & profile
+
+`hermes plugins install` only copies the plugin code. The browser, login, and
+profile are set up separately, once:
+
+1. **`hermes meet install`** — installs Playwright + Chromium (add `--realtime`
+   for the audio bridge).
+2. **`hermes meet auth`** — opens a headed browser, you sign in to the Google
+   account the bot should use, and the session is saved. This creates
+   `auth.json` and seeds a **persistent Chromium profile**, both under
+   `~/.hermes/workspace/meetings/` (outside this plugin dir, so they survive
+   plugin reinstalls/updates). Needs a display — over SSH use Xvfb + x11vnc.
+
+**Is auth optional?** Effectively no for normal use:
+
+- **Required** for `meet_create` (the room is created on the signed-in account)
+  and for joining your **organization's** meetings without sitting in the lobby
+  (org policy usually blocks anonymous/guest joins).
+- **Skippable only** for joining a public meeting as a guest — then the bot
+  waits in the lobby for a host to admit it (`leaveReason: "lobby_timeout"` if
+  not admitted within `HERMES_MEET_LOBBY_TIMEOUT`).
+
+The **`chrome-profile/`** directory is created and managed automatically by the
+bot at runtime (a real on-disk Chromium profile keeps the session sticky); you
+never create it by hand. If `meet_status` ever reports
+`leaveReason: "not_authenticated"`, the saved session expired — re-run
+`hermes meet auth` rather than re-joining.
 
 ## Configuration
 

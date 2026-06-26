@@ -46,7 +46,7 @@ Easiest path — run the built-in installer:
 hermes plugins enable google_meet
 hermes meet install                 # pip deps + Chromium (transcribe only)
 hermes meet install --realtime      # + pulseaudio-utils / brew blackhole+ffmpeg
-hermes meet auth                    # optional; skips guest-lobby wait
+hermes meet auth                    # sign in — REQUIRED for org auto-join & meet_create
 hermes meet setup                   # preflight checks
 ```
 
@@ -106,7 +106,7 @@ Run `hermes meet setup` to preflight local prereqs.
 ## Important limits
 
 - Captions are only as good as Google Meet's live captions. Lossy on overlapping speakers.
-- **Caption language**: the bot forces the live-caption language after joining (default `한국어`). Override with `HERMES_MEET_CAPTION_LANG` (must match Meet's option label, e.g. `English`, `日本語`). `meet_status` reports the applied value as `captionLanguage` (null = the best-effort selector didn't find the control, so Meet's persisted profile preference is used).
+- **Caption language**: by default the bot does **not** force a caption language (unset) — Meet keeps its persisted profile preference. Set `HERMES_MEET_CAPTION_LANG` to force one after joining (must match Meet's option label, e.g. `한국어`, `English`, `日本語`). `meet_status` reports the applied value as `captionLanguage` (null = not forced, or the best-effort selector didn't find the control).
 - Guest mode sits in the lobby until a host admits. Warn the user; `hermes meet auth` avoids this.
 - **Lobby timeout**: if the host doesn't admit the bot within 5 minutes (configurable via `HERMES_MEET_LOBBY_TIMEOUT` env), the bot leaves and `meet_status` reports `leaveReason: "lobby_timeout"`.
 - **Not authenticated**: if `meet_status` reports `leaveReason: "not_authenticated"` (or an `error` mentioning the guest sign-in screen), the saved Google session is invalid/expired and the bot fell back to anonymous guest. Do **not** keep re-joining — it will fail the same way. Tell the user to re-authenticate with `hermes meet auth` (needs a display; over SSH use Xvfb + x11vnc), then retry the join.
