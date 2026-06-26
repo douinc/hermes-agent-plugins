@@ -53,6 +53,25 @@ Each plugin documents its own prerequisites in its directory README. For
 `google_meet` you must run its one-time browser auth (`hermes meet auth`) so the
 bot joins with a signed-in Google session — see [`google_meet/README.md`](google_meet/README.md).
 
+## Plugins vs. skills (optional orchestration)
+
+Installing a plugin gives you its **tools** (and CLI) — that is all you need to
+use it. Some plugins also ship an optional **orchestration skill** under
+[`examples/`](examples/) that encodes higher-level conventions for the agent
+(e.g. `google_meet`'s create → join → transcript → summary flow).
+
+Skills are **not** installed by `hermes plugins install`, and are **never**
+auto-written into `~/.hermes/skills/`. This is deliberate: a skill you have
+customized must never be silently overwritten. To use one, copy it in yourself
+and adapt it for your setup:
+
+```bash
+cp -r examples/google-meet-assistant-skill ~/.hermes/skills/google-meet-assistant
+# then edit it for your chat platform / caption language / team calendar
+```
+
+The plugin's tools work fully without any skill.
+
 ## License
 
 **MIT — free to use, modify, and redistribute, including commercially.** No fee,
