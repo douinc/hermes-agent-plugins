@@ -1,13 +1,13 @@
 # google_meet plugin
 
-Let the hermes agent join a Google Meet call, transcribe it, optionally speak
-in it, and do the followup work afterwards.
+Let the hermes agent create or join a Google Meet call, transcribe it,
+optionally speak in it, and do the followup work afterwards.
 
 ## What ships
 
 | Version | What | Status |
 |---|---|---|
-| v1 | Transcribe-only: Playwright joins Meet, scrapes captions to transcript file | ✓ ships by default |
+| v1 | Create + join a room and scrape live captions to a transcript file (Playwright, listen-only) | ✓ ships by default |
 | v2 | Realtime duplex audio: bot speaks in-call via OpenAI Realtime + BlackHole/PulseAudio null-sink | ✓ opt in with `mode='realtime'` |
 | v3 | Remote node host: run the bot on a different machine than the gateway | ✓ opt in with `node='<name>'` |
 
@@ -49,11 +49,13 @@ Without v2: the "realtime" path is skipped; transcribe runs alone.
 | Path | Purpose |
 |---|---|
 | `plugin.yaml` | manifest |
-| `__init__.py` | `register(ctx)` — registers 5 tools + `on_session_end` hook + `hermes meet` CLI |
-| `meet_bot.py` | Playwright bot subprocess (standalone, `python -m plugins.google_meet.meet_bot`) |
+| `__init__.py` | `register(ctx)` — registers 6 tools (`meet_create`/`join`/`status`/`transcript`/`leave`/`say`) + `on_session_end` hook + `hermes meet` CLI |
+| `meet_bot.py` | Playwright bot subprocess (standalone, `python -m google_meet.meet_bot`) |
+| `meet_create.py` | Playwright subprocess that creates a new Meet link (standalone, `python -m google_meet.meet_create`) |
 | `process_manager.py` | local bot lifecycle + `enqueue_say` |
 | `tools.py` | agent-facing tools + node-routing helper |
-| `cli.py` | `hermes meet setup / auth / join / status / transcript / say / stop / node ...` |
+| `cli.py` | `hermes meet setup / install / auth / join / status / transcript / say / stop / node ...` |
+| `replay_raw_captions.py` | replay a captured `raw_captions.jsonl` through the dedup logic (debugging) |
 | `audio_bridge.py` | v2: PulseAudio null-sink (Linux) + BlackHole probe (macOS) |
 | `realtime/openai_client.py` | v2: `RealtimeSession` + `RealtimeSpeaker` (file-queue → OpenAI Realtime WS → PCM) |
 | `node/protocol.py` | v3: message envelope + validation |
