@@ -114,6 +114,7 @@ Mirror whatever layers exist — always fix the cron job; fix the calendar event
   - Bullets (`* Item`)
   - Quote/status blocks (`> Quote`)
 - Focus on decisions, action items, and key discussion points. Keep it brief and scannable. No flattery or emojis.
+- **Keep it user-facing — hide the plumbing.** Report in plain language, never raw tool output. Do NOT surface internal status fields (`inCall`, `transcriptPath`, `leaveReason`, `captionLanguage`), tool JSON, or absolute file paths like `/home/.../meetings/<code>/transcript.txt`. Say "joined and recording" instead of `inCall: true`; refer to "the transcript" without pasting its path. Status fields are for *your* verification only — translate them into a short human-readable sentence for the user.
 
 ## Common Pitfalls
 1. **Inventing speakers:** use the real names in the transcript; if a line is `Unknown`, say so — never fabricate who spoke.
