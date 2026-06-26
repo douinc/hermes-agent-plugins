@@ -36,13 +36,40 @@ optionally speak in it, and do the followup work afterwards.
 │             ↓                                                        │
 │           OpenAI Realtime WS → speaker.pcm                           │
 │             ↓                                                        │
-│           paplay → null-sink ← Chrome fake mic                       │
+│           paplay → null-sink → .monitor → virtual-source             │
+│                                              ↓                       │
+│                              Chrome fake mic (PULSE_SOURCE)          │
 │                                                                      │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 Without v3: the whole right column runs on the gateway machine.
 Without v2: the "realtime" path is skipped; transcribe runs alone.
+
+### How realtime audio works (`mode='realtime'`)
+
+Only the transcribe path runs by default. When realtime is enabled, the bot can
+*speak* into the call; here is the full chain from `meet_say` to audible voice:
+
+1. **`meet_say(text)` → queue.** `enqueue_say` rejects the call unless the active
+   meeting is in `mode='realtime'`, otherwise appends `{id, text}` to
+   `say_queue.jsonl` and returns immediately (non-blocking).
+2. **Speaker thread.** A `RealtimeSpeaker` thread polls that queue and processes
+   one entry at a time.
+3. **OpenAI Realtime WS → `speaker.pcm`.** `RealtimeSession.speak()` sends the
+   text over `wss://api.openai.com/v1/realtime`, receives `response.audio.delta`
+   frames (base64 **PCM16, 24 kHz mono**), decodes them, and **appends the raw
+   PCM to `speaker.pcm`**.
+4. **PCM pump → null-sink.** A pump streams the growing `speaker.pcm` into a
+   virtual speaker in near-real-time — `paplay` (Linux) into a PulseAudio
+   **null-sink**, or `ffmpeg` (macOS) into **BlackHole**.
+5. **Monitor → virtual mic.** On Linux the null-sink's `.monitor` is the master
+   of a **virtual-source** (a fake microphone). Chrome is launched with
+   `PULSE_SOURCE=<virtual-source>` and `--use-fake-ui-for-media-stream`, so that
+   virtual mic *is* Chrome's microphone — and Google Meet hears the bot.
+
+So the bot never sends WebRTC audio directly: it plays generated speech into a
+fake speaker, and Chrome's fake mic picks it up off that speaker's monitor.
 
 ## Files
 
