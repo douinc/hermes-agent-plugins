@@ -21,14 +21,12 @@ _(more to come — add a new top-level directory per plugin, each with its own `
 
 ## Install
 
-Replace `<owner>` with this repo's GitHub owner.
-
 ```bash
 # Install one plugin from its subdirectory in this monorepo, and enable it.
-hermes plugins install <owner>/hermes-agent-plugins/google_meet --enable
+hermes plugins install douinc/hermes-agent-plugins/google_meet --enable
 
 # Or install disabled, then enable later.
-hermes plugins install <owner>/hermes-agent-plugins/google_meet --no-enable
+hermes plugins install douinc/hermes-agent-plugins/google_meet --no-enable
 hermes plugins enable google_meet
 ```
 
