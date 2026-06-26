@@ -6,6 +6,8 @@ plugins. Each top-level directory is one installable plugin.
 > _Community plugins for hermes-agent — not officially affiliated with or
 > endorsed by Nous Research._
 
+> 🚧 **Work in progress** — actively developed; structure and plugins may still change.
+
 > These plugins install into the hermes plugin system directly — each lands in
 > `~/.hermes/plugins/<name>/` and is gated by `plugins.enabled`. The
 > `hermes plugins install` command does this for you straight from GitHub,
@@ -72,13 +74,13 @@ cp -r examples/google-meet-assistant-skill ~/.hermes/skills/google-meet-assistan
 
 The plugin's tools work fully without any skill.
 
+## Contributing
+
+Contributions are welcome — this repo is actively developed. Open an issue or PR
+to add a plugin, fix a bug, or improve docs. New plugins go in their own
+top-level directory with a `plugin.yaml` (use [`google_meet/`](google_meet/) as a
+template).
+
 ## License
 
-**MIT — free to use, modify, and redistribute, including commercially.** No fee,
-no permission required; the only condition is keeping the copyright + license
-notice in copies (standard MIT).
-
-The `google_meet` plugin is a derivative of the original `google_meet` plugin
-shipped with hermes-agent (© Nous Research, MIT); enhancements and any
-additional plugins © Dou Inc. Both copyright lines are retained in
-[LICENSE](LICENSE) as MIT requires — this does not restrict your use in any way.
+MIT — see [LICENSE](LICENSE).
