@@ -1,0 +1,17 @@
+name: google_meet
+version: 0.3.0
+description: "Create + join a Google Meet call, transcribe live captions, speak in realtime, and follow up afterwards. Enhanced fork: adds meet_create (make-and-join a room), robust caption de-duplication, forced caption language, deterministic create-AND-join, and a presence-gated leave policy. v1 transcribe-only is the default; v2 realtime duplex audio via OpenAI Realtime + BlackHole/PulseAudio ships with mode='realtime'; v3 remote node host lets the bot run on a different machine than the gateway. Explicit-by-design: only joins meet.google.com URLs passed in \u2014 no calendar scanning, no auto-dial."
+author: "Dou Inc. (fork of NousResearch google_meet)"
+kind: standalone
+platforms:
+  - linux
+  - macos
+provides_tools:
+  - meet_create
+  - meet_join
+  - meet_leave
+  - meet_status
+  - meet_transcript
+  - meet_say
+hooks:
+  - on_session_end

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime artifacts that must NEVER be published (auth sessions, transcripts,
+# recordings, live state). These are produced by the plugin at runtime under
+# the hermes home, not in this repo — listed here as a safety net.
+auth.json
+*.storage_state.json
+**/workspace/meetings/
+*.pcm
+raw_captions.jsonl
+transcript.txt
+status.json
+.active.json
+*.log
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
