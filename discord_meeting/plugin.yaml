@@ -1,0 +1,14 @@
+name: discord_meeting
+version: 0.1.0
+description: "Turn Discord voice channels into meeting records. Transcribes every utterance to a durable per-meeting transcript (speaker names resolved, timestamped), keeps the bot silent unless addressed by wake word, suppresses the per-utterance [Voice] echo, and exposes meeting_list / meeting_transcript / meeting_search so the agent can summarise or act on a meeting from any text channel. Plugin-only: no hermes core files are modified."
+author: "Dou Inc."
+kind: standalone
+platforms:
+  - linux
+  - macos
+provides_tools:
+  - meeting_list
+  - meeting_transcript
+  - meeting_search
+hooks:
+  - pre_gateway_dispatch

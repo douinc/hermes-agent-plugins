@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+#
+# Re-authenticate the Meet bot from a headless box, over VNC.
+#
+# `hermes meet auth` needs a real display, which a server does not have. This
+# brings up a throwaway X display + a localhost-only VNC server, opens the bot's
+# *persistent* Chromium profile on it, waits for you to sign in, saves the
+# session, and tears the whole stack back down.
+#
+#   usage:  ./meet-auth-vnc [minutes]        # default 45
+#
+# From the machine with a browser, tunnel the VNC port (it is NOT exposed to the
+# network — a tunnel is the only way in):
+#
+#   ssh -f -N -L 5901:localhost:5900 <host>
+#
+# then point any VNC client at  vnc://localhost:5901  with the password this
+# prints. (Local 5900 is often taken — macOS Screen Sharing binds it — hence
+# 5901 on the near side.)
+#
+# Requirements:  Xvfb  x11vnc   (paste also needs: autocutsel, and xdotool for
+# the typing fallback).  Debian/Ubuntu:
+#   sudo apt install -y xvfb x11vnc autocutsel xdotool
+#
+set -euo pipefail
+
+MINUTES="${1:-45}"
+DISPLAY_NUM="${HERMES_MEET_VNC_DISPLAY:-:99}"
+PORT="${HERMES_MEET_VNC_PORT:-5900}"
+GEOMETRY="${HERMES_MEET_VNC_GEOMETRY:-1440x900x24}"
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DRIVER="$HERE/_meet_auth_driver.py"
+
+# --- python that actually has playwright --------------------------------
+pick_python() {
+  local cands=("${HERMES_MEET_PYTHON:-}" python3)
+  # hermes installs its venv under HERMES_HOME; check both common layouts
+  local home="${HERMES_HOME:-$HOME/.hermes}"
+  cands+=("$home/hermes-agent/venv/bin/python3" "$home/hermes-agent/.venv/bin/python3")
+  for p in "${cands[@]}"; do
+    [ -n "$p" ] || continue
+    command -v "$p" >/dev/null 2>&1 || [ -x "$p" ] || continue
+    if "$p" -c 'import playwright' >/dev/null 2>&1; then echo "$p"; return 0; fi
+  done
+  return 1
+}
+
+PY="$(pick_python)" || {
+  echo "error: no python with playwright installed." >&2
+  echo "       run 'hermes meet install', or set HERMES_MEET_PYTHON=/path/to/python" >&2
+  exit 1
+}
+
+for bin in Xvfb x11vnc; do
+  command -v "$bin" >/dev/null || {
+    echo "error: '$bin' not found. sudo apt install -y xvfb x11vnc autocutsel xdotool" >&2
+    exit 1
+  }
+done
+
+cleanup() {
+  echo
+  echo "==> tearing down VNC stack"
+  # NOTE: resolve pids with pgrep and kill them individually — never
+  # `pkill -f <pattern>` here. pkill matches against full command lines,
+  # including this script's own, and cheerfully kills its own shell (exit 144).
+  [ -n "${VNC_PID:-}" ]  && kill "$VNC_PID"  2>/dev/null || true
+  [ -n "${XVFB_PID:-}" ] && kill "$XVFB_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# --- 1. virtual display --------------------------------------------------
+if pgrep -f "Xvf[b] ${DISPLAY_NUM}" >/dev/null; then
+  echo "==> Xvfb ${DISPLAY_NUM} already running, reusing"
+else
+  Xvfb "${DISPLAY_NUM}" -screen 0 "${GEOMETRY}" -ac >/tmp/meet-xvfb.log 2>&1 &
+  XVFB_PID=$!
+  sleep 2
+  pgrep -f "Xvf[b] ${DISPLAY_NUM}" >/dev/null || {
+    echo "Xvfb failed to start:" >&2; cat /tmp/meet-xvfb.log >&2; exit 1
+  }
+  echo "==> Xvfb ${DISPLAY_NUM} up (${GEOMETRY})"
+fi
+
+# --- 2. clipboard bridge, BEFORE x11vnc ----------------------------------
+# Xvfb runs no window manager, so nothing owns the X selections and VNC
+# copy/paste silently does nothing. autocutsel bridges selection <-> cutbuffer.
+# It must be running before x11vnc starts, or x11vnc won't see the owner.
+if command -v autocutsel >/dev/null; then
+  for sel in CLIPBOARD PRIMARY; do
+    pgrep -f "autocutse[l].*${sel}" >/dev/null \
+      || autocutsel -fork -display "${DISPLAY_NUM}" -selection "$sel"
+  done
+  echo "==> clipboard bridge up (CLIPBOARD + PRIMARY)"
+else
+  echo "==> WARNING: autocutsel missing — paste into the VNC window will not work."
+  echo "    sudo apt install -y autocutsel"
+fi
+
+# --- 3. VNC server: loopback only, fresh random password -----------------
+for stale in $(pgrep -f "x11vn[c].*rfbport ${PORT}" 2>/dev/null || true); do
+  kill "$stale" 2>/dev/null || true
+done
+sleep 1
+
+mkdir -p "$HOME/.vnc"
+# Generate with python, not `tr /dev/urandom | head -c N`: under `set -o
+# pipefail` the SIGPIPE head sends tr fails the whole pipeline.
+VNCPW="$("$PY" -c 'import secrets,string;print("".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(12)))')"
+x11vnc -storepasswd "$VNCPW" "$HOME/.vnc/passwd" >/dev/null 2>&1
+
+x11vnc -display "${DISPLAY_NUM}" -rfbauth "$HOME/.vnc/passwd" -localhost \
+       -rfbport "${PORT}" -forever -shared -noxdamage -bg \
+       >/tmp/meet-x11vnc.log 2>&1
+sleep 2
+VNC_PID="$(pgrep -f "x11vn[c].*rfbport ${PORT}" | head -1 || true)"
+ss -ltn 2>/dev/null | grep -q ":${PORT}" || {
+  echo "x11vnc failed to start:" >&2; cat /tmp/meet-x11vnc.log >&2; exit 1
+}
+
+cat <<EOF
+
+  ---------------------------------------------------------------
+   VNC ready  —  bound to loopback only, so tunnel in:
+
+     ssh -f -N -L 5901:localhost:${PORT} <host>
+
+   then open       vnc://localhost:5901
+   password        ${VNCPW}
+
+   Sign in to the Google account the bot should use. This exits by
+   itself once you are signed in, and cleans up after itself.
+
+   Paste inside the VNC window is Ctrl+V, not Cmd+V.
+   If paste still refuses, type the password in from the terminal:
+     read -rs PW && DISPLAY=${DISPLAY_NUM} xdotool type --delay 30 "\$PW"
+  ---------------------------------------------------------------
+
+  waiting up to ${MINUTES} min ...
+
+EOF
+
+# --- 4. headed sign-in on the persistent profile -------------------------
+DISPLAY="${DISPLAY_NUM}" HERMES_MEET_AUTH_MINUTES="${MINUTES}" "$PY" "$DRIVER"
