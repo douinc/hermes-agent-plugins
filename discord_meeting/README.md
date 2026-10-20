@@ -133,6 +133,12 @@ CUDA support for that architecture, in which case transcription is CPU-bound no
 matter what the model is. `medium` runs ~1.6× faster than `large-v3` if
 conversational latency matters more than transcript accuracy.
 
+Every captured utterance is logged (`utterance captured user=… 4.2s`), and a
+speech-to-text failure on one is logged as a warning (`speech-to-text failed
+for … (provider=…): …`). hermes itself drops a failed transcription without a
+word, so if the capture lines are there and nothing follows, read the warning
+before suspecting the room was quiet.
+
 ## Consent
 
 The bot records everything said in the channel. Tell participants. This plugin

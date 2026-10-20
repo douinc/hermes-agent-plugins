@@ -24,6 +24,7 @@ those from being generated at all, which beats filtering them afterwards.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 
@@ -109,6 +110,7 @@ def install() -> bool:
     loader = _patch_whisper_loader()
     min_speech = _patch_min_speech()
     _patch_utterance_logging()
+    _patch_stt_failure_logging()
     _APPLIED = bool(loader and min_speech)
     return _APPLIED
 
@@ -152,3 +154,45 @@ def _patch_utterance_logging() -> bool:
         cls.check_silence = check_silence
         patched += 1
     return patched > 0
+
+
+def _patch_stt_failure_logging() -> bool:
+    """Say so when speech-to-text fails on a voice-channel utterance.
+
+    ``_process_voice_input`` returns silently when ``transcribe_audio`` reports
+    ``success: False``, so a backend that is missing, refusing, or timing out
+    leaves only "utterance captured" lines behind — the same picture as a quiet
+    room, until someone asks where the transcript went. The adapter imports
+    ``transcribe_audio`` at call time, so wrapping the module attribute reaches
+    it. Callers that pass ``source`` (voice mode, inbound voice notes) report
+    their own failures and are left alone.
+    """
+    try:
+        from tools import transcription_tools as tt
+    except Exception as exc:
+        logger.warning("discord_meeting: STT failure logging unavailable: %s", exc)
+        return False
+
+    original = tt.transcribe_audio
+    if getattr(original, "_discord_meeting_wrapped", False):
+        return True
+
+    @functools.wraps(original)
+    def transcribe_audio(file_path, *args, **kwargs):
+        result = original(file_path, *args, **kwargs)
+        try:
+            source = kwargs.get("source", args[1] if len(args) > 1 else None)
+            if source is None and isinstance(result, dict) and not result.get("success"):
+                logger.warning(
+                    "discord_meeting: speech-to-text failed for %s (provider=%s): %s",
+                    os.path.basename(str(file_path)),
+                    result.get("provider") or "unknown",
+                    result.get("error") or "no error reported",
+                )
+        except Exception:
+            pass
+        return result
+
+    transcribe_audio._discord_meeting_wrapped = True
+    tt.transcribe_audio = transcribe_audio
+    return True
