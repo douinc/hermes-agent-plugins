@@ -110,8 +110,8 @@ def install() -> bool:
     loader = _patch_whisper_loader()
     min_speech = _patch_min_speech()
     _patch_utterance_logging()
-    _patch_stt_failure_logging()
-    _APPLIED = bool(loader and min_speech)
+    failure_log = _patch_stt_failure_logging()
+    _APPLIED = bool(loader and min_speech and failure_log)
     return _APPLIED
 
 
