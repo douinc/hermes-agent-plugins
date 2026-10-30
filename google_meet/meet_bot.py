@@ -545,9 +545,8 @@ _CAPTIONS_ON_JS = r"""
 () => {
   if (document.querySelector('[role="region"][aria-label*="aption" i], ' +
                              '[role="region"][aria-label*="자막"], div.vNKgIf')) return true;
-  const b = [...document.querySelectorAll('button[aria-pressed]')]
-    .find(e => /자막|aption/i.test(e.getAttribute('aria-label') || ''));
-  return !!(b && b.getAttribute('aria-pressed') === 'true');
+  return [...document.querySelectorAll('button[aria-pressed="true"]')]
+    .some(e => /자막|aption/i.test(e.getAttribute('aria-label') || ''));
 }
 """
 
@@ -1190,11 +1189,28 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
             caption_lang_tries = 0
             caption_lang_max_tries = int(os.environ.get("HERMES_MEET_CAPTION_LANG_TRIES", "6"))
             last_caption_lang_try = 0.0
+            # The enable keypress on admission can land before Meet binds its
+            # shortcuts or while a post-join dialog has focus, and the caption-
+            # language retry below only runs when HERMES_MEET_CAPTION_LANG is
+            # set — so retry enabling captions on its own until confirmed on.
+            captions_on = False
+            captions_on_tries = 0
+            last_captions_on_try = 0.0
             while not stop_flag["stop"]:
                 now = time.time()
                 if deadline and now > deadline:
                     state.set(leave_reason="duration_expired")
                     break
+
+                if (
+                    state.in_call
+                    and not captions_on
+                    and captions_on_tries < 10
+                    and (now - last_captions_on_try) > 4.0
+                ):
+                    last_captions_on_try = now
+                    captions_on_tries += 1
+                    captions_on = _ensure_captions_on(page, state)
 
                 # Re-assert the caption language until confirmed.
                 if (
