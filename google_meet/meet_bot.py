@@ -541,6 +541,35 @@ _PICK_CAPTION_LANG_JS = r"""
 """
 
 
+_CAPTIONS_ON_JS = r"""
+() => {
+  if (document.querySelector('[role="region"][aria-label*="aption" i], ' +
+                             '[role="region"][aria-label*="자막"], div.vNKgIf')) return true;
+  return [...document.querySelectorAll('button[aria-pressed="true"]')]
+    .some(e => /자막|aption/i.test(e.getAttribute('aria-label') || ''));
+}
+"""
+
+
+def _ensure_captions_on(page, state) -> bool:
+    """Turn Meet live captions on unless they already are.
+
+    Meet ignores synthetic (untrusted) key events and renames the caption
+    toggle across UI rollouts (e.g. 자막 사용 → 자막 및 번역), so a trusted
+    ``c`` keypress is used instead of a label match. ``c`` toggles, so the
+    current state is checked first to avoid switching captions off.
+    """
+    try:
+        if page.evaluate(_CAPTIONS_ON_JS):
+            return True
+        page.keyboard.press("c")
+        state.set(captions_enabled_attempted=True)
+        page.wait_for_timeout(800)
+        return bool(page.evaluate(_CAPTIONS_ON_JS))
+    except Exception:
+        return False
+
+
 def _select_caption_language(page, state) -> bool:
     """Best-effort: force Meet's live-caption "meeting language".
 
@@ -596,19 +625,9 @@ def _select_caption_language(page, state) -> bool:
             page.wait_for_timeout(400)
 
         # 1b. Ensure captions are actually on — the modal may have swallowed the
-        #     earlier enable click, and the language combobox only renders while
-        #     captions are active. Idempotent: once on, the toggle reads
-        #     "자막 사용 중지" and won't match these labels.
-        for nm in ("자막 사용", "Turn on captions", "Captions"):
-            try:
-                b = page.get_by_role("button", name=nm, exact=False).first
-                if b.count() and b.is_visible():
-                    b.click(timeout=3_000)
-                    state.set(captions_enabled_attempted=True)
-                    page.wait_for_timeout(800)
-                    break
-            except Exception:
-                continue
+        #     earlier enable attempt, and the language combobox only renders while
+        #     captions are active.
+        _ensure_captions_on(page, state)
 
         # 2. Locate the meeting-language combobox (present once captions are on).
         combo = None
@@ -1170,11 +1189,28 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
             caption_lang_tries = 0
             caption_lang_max_tries = int(os.environ.get("HERMES_MEET_CAPTION_LANG_TRIES", "6"))
             last_caption_lang_try = 0.0
+            # The enable keypress on admission can land before Meet binds its
+            # shortcuts or while a post-join dialog has focus, and the caption-
+            # language retry below only runs when HERMES_MEET_CAPTION_LANG is
+            # set — so retry enabling captions on its own until confirmed on.
+            captions_on = False
+            captions_on_tries = 0
+            last_captions_on_try = 0.0
             while not stop_flag["stop"]:
                 now = time.time()
                 if deadline and now > deadline:
                     state.set(leave_reason="duration_expired")
                     break
+
+                if (
+                    state.in_call
+                    and not captions_on
+                    and captions_on_tries < 10
+                    and (now - last_captions_on_try) > 4.0
+                ):
+                    last_captions_on_try = now
+                    captions_on_tries += 1
+                    captions_on = _ensure_captions_on(page, state)
 
                 # Re-assert the caption language until confirmed.
                 if (
@@ -1205,21 +1241,8 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
                             lobby_waiting=False,
                             joined_at=now,
                         )
-                        # Turn captions on by clicking the toolbar button.
-                        # A synthetic 'c' keypress is ignored by Meet as
-                        # untrusted, so the click is the reliable path. This
-                        # block runs once (guarded by `not state.in_call`).
-                        for cap_label in ("자막 사용", "Turn on captions", "Captions"):
-                            try:
-                                cbtn = page.get_by_role(
-                                    "button", name=cap_label, exact=False
-                                ).first
-                                if cbtn.count() and cbtn.is_visible():
-                                    cbtn.click(timeout=3_000)
-                                    state.set(captions_enabled_attempted=True)
-                                    break
-                            except Exception:
-                                continue
+                        # Runs once (guarded by `not state.in_call`).
+                        _ensure_captions_on(page, state)
                         # Force the live-caption language (default 한국어) so
                         # Korean speech isn't transcribed as garbled English.
                         # Best-effort; runs once alongside enabling captions.
@@ -1325,11 +1348,14 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
                         and last_good_count >= 2
                         and (now - last_good_count_at) <= present_staleness
                     )
+                    # Measured from the join when no caption ever arrived, so
+                    # a bot whose captions never came on still times out.
+                    quiet_since = state.last_caption_at or state.joined_at
                     if (
                         silence_timeout > 0
                         and not others_confirmed
-                        and state.last_caption_at
-                        and now - state.last_caption_at > silence_timeout
+                        and quiet_since
+                        and now - quiet_since > silence_timeout
                     ):
                         state.set(leave_reason="silence_timeout")
                         break
@@ -1530,19 +1556,22 @@ def _detect_guest_screen(page) -> bool:
 def _participant_count(page) -> Optional[int]:
     """Read the in-call participant count from Meet's header badge.
 
-    Meet renders the live count in ``div.fs3avc`` (obfuscated class, current
-    as of 2026). Returns the integer, or None if the element is absent or
-    unparseable (e.g. Meet changed the class) so callers can fall back to a
-    caption-silence timeout instead of mis-detecting "everyone left".
+    Meet renders the live count in a ``div.fs3avc`` chip (obfuscated class,
+    current as of 2026). Status chips such as "텍스트 변환 중" or the Gemini
+    note-taker share that class and can come first, so the count is the chip
+    whose text is a bare integer. Returns None if no such chip exists (e.g.
+    Meet changed the class) so callers can fall back to a caption-silence
+    timeout instead of mis-detecting "everyone left".
     """
     try:
         n = page.evaluate(
             r"""
             () => {
-              const el = document.querySelector('div.fs3avc');
-              if (!el) return null;
-              const n = parseInt((el.textContent || '').trim(), 10);
-              return Number.isFinite(n) ? n : null;
+              for (const el of document.querySelectorAll('div.fs3avc')) {
+                const t = (el.textContent || '').trim();
+                if (/^\d+$/.test(t)) return parseInt(t, 10);
+              }
+              return null;
             }
             """
         )
