@@ -504,24 +504,6 @@ _CAPTION_OBSERVER_JS = r"""
 """
 
 
-def _enable_captions_js() -> str:
-    """Return a small JS snippet that tries to click the 'Turn on captions' button.
-
-    Best-effort — Meet's caption toggle is keyboard-accessible via ``c``. We
-    dispatch that keystroke as a cheap fallback. Real click targeting is too
-    brittle to rely on.
-    """
-    return r"""
-    (() => {
-      const ev = new KeyboardEvent('keydown', {
-        key: 'c', code: 'KeyC', keyCode: 67, which: 67, bubbles: true,
-      });
-      document.body.dispatchEvent(ev);
-      return true;
-    })();
-    """
-
-
 # JS that clicks the language ``option`` whose label/text matches the target.
 # Meet's language list is a *virtualized* listbox of ~100 options that don't
 # reliably surface in Playwright's accessibility tree (get_by_role("option")
@@ -559,11 +541,11 @@ def _ensure_captions_on(page, state) -> bool:
     ``c`` keypress is used instead of a label match. ``c`` toggles, so the
     current state is checked first to avoid switching captions off.
     """
+    state.set(captions_enabled_attempted=True)
     try:
         if page.evaluate(_CAPTIONS_ON_JS):
             return True
         page.keyboard.press("c")
-        state.set(captions_enabled_attempted=True)
         page.wait_for_timeout(800)
         return bool(page.evaluate(_CAPTIONS_ON_JS))
     except Exception:
@@ -1042,12 +1024,12 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
             # via the process env before launch so the child Chrome inherits it.
             for k, v in chrome_env.items():
                 os.environ[k] = v
+            # No user_agent override: a pinned UA ages into Meet's "browser no
+            # longer supported" banner, and client hints report the real
+            # browser regardless. A CDP UA override that clears those
+            # hints stops the bot from getting past the pre-join screen.
             context_args = {
                 "viewport": {"width": 1280, "height": 800},
-                "user_agent": (
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                ),
                 # Drive navigator.language → Meet derives its default UI /
                 # live-caption language from this. Set HERMES_MEET_LOCALE to your
                 # locale (e.g. ko-KR, ja-JP, es-ES) so speech transcribes in the
@@ -1105,12 +1087,8 @@ def run_bot() -> int:  # noqa: C901 — orchestration, explicit branches
             _try_guest_name(page, guest_name)
             _click_join(page, state)
 
-            # Install caption observer and attempt to enable captions.
-            try:
-                page.evaluate(_enable_captions_js())
-                state.set(captions_enabled_attempted=True)
-            except Exception:
-                pass
+            # Install the caption observer. Captions themselves are enabled
+            # once admitted (_ensure_captions_on) — the toolbar isn't there yet.
             try:
                 page.evaluate(_CAPTION_OBSERVER_JS)
             except Exception as e:
